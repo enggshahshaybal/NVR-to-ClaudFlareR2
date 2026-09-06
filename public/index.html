@@ -1,17 +1,1046 @@
 <!DOCTYPE html>
-
-<html>
-
+<html lang="en" class="dark">
 <head>
-
-<title>Cloudflare R2 Test</title>
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TurfCast — AI Sports Video & Cloud Sync Studio</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            turf: {
+              50: '#ecfdf5',
+              400: '#34d399',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+              900: '#064e3b',
+              accent: '#22c55e'
+            },
+            dark: {
+              800: '#1e293b',
+              850: '#131d2e',
+              900: '#0f172a',
+              950: '#090d16'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <style>
+    /* Custom scrollbar for dark UI */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .glass-panel {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+  </style>
 </head>
+<body class="bg-dark-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-turf-500 selection:text-white">
 
-<body>
+  <!-- TOP NAVIGATION / HEADER -->
+  <header class="border-b border-slate-800/80 bg-dark-900/90 sticky top-0 z-40 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-turf-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-turf-500/20">
+          <i class="fa-solid fa-video text-white text-lg"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent">TurfCast</span>
+            <span class="text-xs px-2 py-0.5 rounded-full font-semibold uppercase bg-turf-500/10 text-turf-400 border border-turf-500/20">Studio v2</span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">AI Multi-Camera Match Recording & Cloudflare R2 Sync</p>
+        </div>
+      </div>
 
-<h1>Cloudflare R2 Video Player</h1>
+      <!-- Live System Status Indicators -->
+      <div class="flex items-center space-x-3 text-xs">
+        <div id="nvrStatusBadge" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-dark-800 border border-slate-700/60">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-slate-400">NVR:</span>
+          <span id="nvrTargetText" class="font-mono text-slate-200 font-medium">Loading...</span>
+        </div>
 
+        <div id="r2StatusBadge" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-dark-800 border border-slate-700/60">
+          <i class="fa-brands fa-cloudflare text-amber-400"></i>
+          <span class="text-slate-400">R2:</span>
+          <span id="r2BucketText" class="font-mono text-slate-200 font-medium">Connected</span>
+        </div>
+
+        <button id="refreshAllBtn" title="Refresh Data" class="p-2 rounded-lg bg-dark-800 hover:bg-dark-850 border border-slate-700/60 text-slate-400 hover:text-white transition">
+          <i class="fa-solid fa-arrows-rotate"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+    <!-- TAB SELECTOR -->
+    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div class="flex space-x-2">
+        <button id="tabRecordingsBtn" onclick="switchTab('recordings')" class="px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 transition bg-turf-600/20 text-turf-400 border border-turf-500/30">
+          <i class="fa-solid fa-camera"></i>
+          <span>NVR Search & Cloud Sync</span>
+        </button>
+        <button id="tabR2GalleryBtn" onclick="switchTab('gallery')" class="px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/40">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <span>Cloudflare R2 Library</span>
+          <span id="r2CountBadge" class="ml-1 text-xs px-2 py-0.2 rounded-full bg-slate-800 text-slate-300">0</span>
+        </button>
+      </div>
+
+      <!-- Auto-Monitor Toggle for Live Matches -->
+      <div class="flex items-center space-x-2 text-xs bg-dark-800/90 px-3 py-1.5 rounded-lg border border-slate-700/50">
+        <label for="autoMonitorToggle" class="flex items-center cursor-pointer space-x-2 select-none">
+          <span class="text-slate-300 font-medium">Live Auto-Sync Mode</span>
+          <div class="relative">
+            <input type="checkbox" id="autoMonitorToggle" class="sr-only">
+            <div class="w-8 h-4 bg-slate-700 rounded-full transition" id="toggleBg"></div>
+            <div class="w-3 h-3 bg-white rounded-full absolute left-0.5 top-0.5 transition" id="toggleDot"></div>
+          </div>
+        </label>
+        <span id="autoMonitorStatusText" class="text-slate-500 text-[11px] hidden sm:inline">(Off)</span>
+      </div>
+    </div>
+
+    <!-- VIEW 1: NVR RECORDING SEARCH & AUTO-SYNC -->
+    <div id="viewRecordings" class="space-y-6">
+
+      <!-- SEARCH CONTROLS CARD -->
+      <div class="glass-panel p-5 rounded-2xl shadow-xl space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <h2 class="text-base font-semibold text-slate-100 flex items-center space-x-2">
+            <i class="fa-solid fa-magnifying-glass text-turf-400"></i>
+            <span>Query Match Recordings</span>
+          </h2>
+          <!-- Preset Chips -->
+          <div class="flex items-center flex-wrap gap-1.5 text-xs">
+            <span class="text-slate-500 mr-1 text-[11px] uppercase font-bold tracking-wider">Presets:</span>
+            <button onclick="applyTimePreset(15)" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-turf-600/20 hover:text-turf-400 border border-slate-700 text-slate-300 transition">Last 15m</button>
+            <button onclick="applyTimePreset(30)" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-turf-600/20 hover:text-turf-400 border border-slate-700 text-slate-300 transition">Last 30m</button>
+            <button onclick="applyTimePreset(60)" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-turf-600/20 hover:text-turf-400 border border-slate-700 text-slate-300 transition">Last 1h</button>
+            <button onclick="applyTimePreset(180)" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-turf-600/20 hover:text-turf-400 border border-slate-700 text-slate-300 transition">Last 3h</button>
+            <button onclick="applyTimePresetToday()" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-turf-600/20 hover:text-turf-400 border border-slate-700 text-slate-300 transition">Full Day</button>
+          </div>
+        </div>
+
+        <form id="searchForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <!-- Camera / Track Selector -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">
+              <i class="fa-solid fa-video mr-1 text-turf-400"></i> Camera / Track
+            </label>
+            <select id="trackIdInput" class="w-full bg-dark-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-turf-500 transition">
+              <option value="101" selected>Camera 1 - Main Stream (101)</option>
+              <option value="102">Camera 1 - Sub Stream (102)</option>
+              <option value="201">Camera 2 - Main Stream (201)</option>
+              <option value="202">Camera 2 - Sub Stream (202)</option>
+              <option value="301">Camera 3 - Main Stream (301)</option>
+              <option value="302">Camera 3 - Sub Stream (302)</option>
+            </select>
+          </div>
+
+          <!-- Match Date -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">
+              <i class="fa-regular fa-calendar mr-1 text-turf-400"></i> Date
+            </label>
+            <input type="date" id="matchDateInput" class="w-full bg-dark-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-turf-500 transition" />
+          </div>
+
+          <!-- Start Time & End Time -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1.5">Start Time</label>
+              <input type="time" id="startTimeInput" step="1" class="w-full bg-dark-900 border border-slate-700 rounded-xl px-2 py-2 text-sm text-slate-200 focus:outline-none focus:border-turf-500 transition" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1.5">End Time</label>
+              <input type="time" id="endTimeInput" step="1" class="w-full bg-dark-900 border border-slate-700 rounded-xl px-2 py-2 text-sm text-slate-200 focus:outline-none focus:border-turf-500 transition" />
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex gap-2">
+            <button type="submit" id="searchBtn" class="flex-1 bg-turf-600 hover:bg-turf-500 text-white font-semibold py-2 px-4 rounded-xl text-sm transition flex items-center justify-center space-x-2 shadow-lg shadow-turf-600/30 active:scale-[0.98]">
+              <i class="fa-solid fa-search"></i>
+              <span>Find Videos</span>
+            </button>
+            <button type="button" id="autoSyncAllBtn" title="Search and instantly upload all found videos to R2" class="bg-dark-800 hover:bg-slate-700 text-turf-400 border border-turf-500/30 font-semibold py-2 px-3 rounded-xl text-sm transition flex items-center justify-center space-x-1 active:scale-[0.98]">
+              <i class="fa-solid fa-bolt"></i>
+              <span>Auto Post</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- PROGRESS & ACTIVITY FEED CARD -->
+      <div id="activityCard" class="glass-panel p-4 rounded-2xl space-y-3 hidden">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span id="activitySpinner" class="animate-spin text-turf-400"><i class="fa-solid fa-circle-notch"></i></span>
+            <span id="activityTitle" class="text-sm font-semibold text-slate-200">Processing...</span>
+          </div>
+          <span id="activityProgressStats" class="text-xs font-mono text-slate-400"></span>
+        </div>
+        <!-- Progress Bar -->
+        <div class="w-full bg-dark-900 rounded-full h-2 overflow-hidden border border-slate-800">
+          <div id="progressBar" class="bg-gradient-to-r from-turf-500 to-emerald-400 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <!-- Terminal Logs -->
+        <div id="terminalLogs" class="bg-dark-950 rounded-xl p-3 max-h-36 overflow-y-auto font-mono text-xs text-slate-300 space-y-1 border border-slate-800/80">
+          <div class="text-slate-500 italic">Ready for commands...</div>
+        </div>
+      </div>
+
+      <!-- RECORDINGS SEARCH RESULTS TABLE -->
+      <div class="glass-panel rounded-2xl overflow-hidden shadow-xl">
+        <div class="px-5 py-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-dark-900/60">
+          <div class="flex items-center space-x-3">
+            <h3 class="text-base font-bold text-slate-100 flex items-center space-x-2">
+              <i class="fa-solid fa-film text-turf-400"></i>
+              <span>Discovered NVR Recordings</span>
+            </h3>
+            <span id="resultsCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-dark-800 text-slate-300 border border-slate-700">0 found</span>
+          </div>
+
+          <!-- Batch Action Buttons -->
+          <div id="batchActionsBar" class="flex items-center space-x-2 hidden">
+            <span class="text-xs text-slate-400"><span id="selectedCountText">0</span> selected</span>
+            <button onclick="batchSyncSelected()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition shadow-sm">
+              <i class="fa-solid fa-cloud-arrow-up"></i>
+              <span>Sync to R2</span>
+            </button>
+            <button onclick="batchDownloadSelected()" class="bg-dark-800 hover:bg-dark-850 border border-slate-700 text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition">
+              <i class="fa-solid fa-download"></i>
+              <span>Download Selected</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Table Content -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-300">
+            <thead class="bg-dark-900/90 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
+              <tr>
+                <th scope="col" class="p-4 w-4">
+                  <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)" class="rounded border-slate-700 bg-dark-900 text-turf-500 focus:ring-turf-500" />
+                </th>
+                <th scope="col" class="py-3 px-4">Time Range (Bangladesh)</th>
+                <th scope="col" class="py-3 px-4">Duration</th>
+                <th scope="col" class="py-3 px-4">Camera Track</th>
+                <th scope="col" class="py-3 px-4">Playback URI / Details</th>
+                <th scope="col" class="py-3 px-4 text-center">Status</th>
+                <th scope="col" class="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="recordingsTableBody" class="divide-y divide-slate-800/60">
+              <tr>
+                <td colspan="7" class="py-12 text-center text-slate-500">
+                  <i class="fa-solid fa-magnifying-glass text-2xl mb-2 text-slate-600"></i>
+                  <p>No search performed yet. Click "Find Videos" to scan the NVR.</p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- VIEW 2: CLOUDFLARE R2 VIDEO LIBRARY & PLAYER -->
+    <div id="viewGallery" class="space-y-6 hidden">
+      <div class="glass-panel p-5 rounded-2xl shadow-xl flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-100 flex items-center space-x-2">
+            <i class="fa-brands fa-cloudflare text-amber-400"></i>
+            <span>Cloudflare R2 Hosted Videos</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Synced match recordings stored on global Cloudflare R2 bucket</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="loadR2Videos()" class="bg-dark-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold px-3 py-2 rounded-xl flex items-center space-x-1.5 transition">
+            <i class="fa-solid fa-arrows-rotate"></i>
+            <span>Refresh Cloud List</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Cloudflare Videos Grid -->
+      <div id="r2VideoGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div class="col-span-full py-12 text-center text-slate-500 glass-panel rounded-2xl">
+          <i class="fa-solid fa-circle-notch animate-spin text-2xl mb-2 text-slate-400"></i>
+          <p>Loading Cloudflare R2 storage...</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- VIDEO PLAYER MODAL -->
+  <div id="videoModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="glass-panel max-w-4xl w-full rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col">
+      <div class="px-5 py-3 border-b border-slate-800 flex items-center justify-between bg-dark-900">
+        <h4 id="videoModalTitle" class="text-sm font-semibold text-slate-200 truncate pr-4">TurfCast Match Video</h4>
+        <button onclick="closeVideoModal()" class="text-slate-400 hover:text-white transition p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div class="bg-black aspect-video flex items-center justify-center">
+        <video id="modalVideoElement" controls class="w-full h-full max-h-[70vh] focus:outline-none" preload="metadata">
+          Your browser does not support HTML5 video.
+        </video>
+      </div>
+      <div class="p-4 bg-dark-900/90 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="text-slate-400 font-mono truncate max-w-md" id="modalVideoUrl"></div>
+        <div class="flex items-center space-x-2">
+          <button id="modalCopyBtn" onclick="copyModalUrl()" class="px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-850 border border-slate-700 text-slate-200 transition flex items-center space-x-1.5">
+            <i class="fa-regular fa-copy"></i>
+            <span>Copy Link</span>
+          </button>
+          <a id="modalDownloadBtn" href="#" download target="_blank" class="px-3 py-1.5 rounded-lg bg-turf-600 hover:bg-turf-500 text-white font-semibold transition flex items-center space-x-1.5">
+            <i class="fa-solid fa-download"></i>
+            <span>Download</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- JAVASCRIPT APPLICATION LOGIC -->
+  <script>
+    // State Store
+    let currentRecordings = [];
+    let r2Videos = [];
+    let selectedIndices = new Set();
+    let isAutoMonitoring = false;
+    let autoMonitorInterval = null;
+    let systemStatus = {};
+
+    // Initial Setup
+    document.addEventListener("DOMContentLoaded", () => {
+      initTimeInputs();
+      fetchSystemStatus();
+      loadR2Videos();
+
+      // Form Search Event
+      document.getElementById("searchForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        searchRecordings();
+      });
+
+      // Quick Auto-Sync All Button
+      document.getElementById("autoSyncAllBtn").addEventListener("click", () => {
+        searchRecordings(true); // true = auto sync upon completion
+      });
+
+      // Refresh button
+      document.getElementById("refreshAllBtn").addEventListener("click", () => {
+        fetchSystemStatus();
+        loadR2Videos();
+        showToast("System info & storage refreshed", "info");
+      });
+
+      // Auto Monitor Toggle
+      const monitorToggle = document.getElementById("autoMonitorToggle");
+      monitorToggle.addEventListener("change", (e) => {
+        toggleAutoMonitor(e.target.checked);
+      });
+    });
+
+    // Time Presets & Initializer
+    function initTimeInputs() {
+      const now = new Date();
+      // Default to today
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const day = String(now.getDate()).padStart(2, "0");
+      document.getElementById("matchDateInput").value = `${year}-${month}-${day}`;
+
+      // Default to last 30 minutes
+      applyTimePreset(30);
+    }
+
+    function applyTimePreset(minutes) {
+      const now = new Date();
+      const past = new Date(now.getTime() - minutes * 60 * 1000);
+
+      document.getElementById("startTimeInput").value = formatTimeForInput(past);
+      document.getElementById("endTimeInput").value = formatTimeForInput(now);
+    }
+
+    function applyTimePresetToday() {
+      document.getElementById("startTimeInput").value = "00:00:00";
+      document.getElementById("endTimeInput").value = "23:59:59";
+    }
+
+    function formatTimeForInput(date) {
+      const h = String(date.getHours()).padStart(2, "0");
+      const m = String(date.getMinutes()).padStart(2, "0");
+      const s = String(date.getSeconds()).padStart(2, "0");
+      return `${h}:${m}:${s}`;
+    }
+
+    // Convert Local Date + Time to ISO UTC String (matching Hikvision ISAPI requirement)
+    function buildISOTimeString(dateStr, timeStr) {
+      if (!timeStr) timeStr = "00:00:00";
+      if (timeStr.split(":").length === 2) timeStr += ":00";
+      const localDate = new Date(`${dateStr}T${timeStr}`);
+      // Return ISO string format: 2026-09-06T15:30:00Z
+      return localDate.toISOString().split(".")[0] + "Z";
+    }
+
+    // Format ISO string to readable Bangladesh / Local time
+    function formatDisplayTime(isoString) {
+      if (!isoString) return "-";
+      try {
+        const d = new Date(isoString);
+        return d.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      } catch {
+        return isoString;
+      }
+    }
+
+    function calculateDuration(startIso, endIso) {
+      try {
+        const diffMs = new Date(endIso).getTime() - new Date(startIso).getTime();
+        if (diffMs <= 0) return "-";
+        const totalSec = Math.floor(diffMs / 1000);
+        const mins = Math.floor(totalSec / 60);
+        const secs = totalSec % 60;
+        return `${mins}m ${secs}s`;
+      } catch {
+        return "-";
+      }
+    }
+
+    // Tab Navigation
+    function switchTab(tab) {
+      const viewRecordings = document.getElementById("viewRecordings");
+      const viewGallery = document.getElementById("viewGallery");
+      const tabRecordingsBtn = document.getElementById("tabRecordingsBtn");
+      const tabR2GalleryBtn = document.getElementById("tabR2GalleryBtn");
+
+      if (tab === "recordings") {
+        viewRecordings.classList.remove("hidden");
+        viewGallery.classList.add("hidden");
+        tabRecordingsBtn.className = "px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 transition bg-turf-600/20 text-turf-400 border border-turf-500/30";
+        tabR2GalleryBtn.className = "px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/40";
+      } else {
+        viewRecordings.classList.add("hidden");
+        viewGallery.classList.remove("hidden");
+        tabR2GalleryBtn.className = "px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 transition bg-turf-600/20 text-turf-400 border border-turf-500/30";
+        tabRecordingsBtn.className = "px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/40";
+        loadR2Videos();
+      }
+    }
+
+    // System Status
+    async function fetchSystemStatus() {
+      try {
+        const res = await fetch("/api/status");
+        if (res.ok) {
+          systemStatus = await res.json();
+          document.getElementById("nvrTargetText").innerText = systemStatus.nvr?.ip || "Online";
+          document.getElementById("r2BucketText").innerText = systemStatus.r2?.bucket || "Connected";
+        }
+      } catch (err) {
+        document.getElementById("nvrTargetText").innerText = "Offline";
+        document.getElementById("r2BucketText").innerText = "Unknown";
+      }
+    }
+
+    // Logging & Terminal Helper
+    function logMessage(msg, type = "info") {
+      const terminal = document.getElementById("terminalLogs");
+      const card = document.getElementById("activityCard");
+      card.classList.remove("hidden");
+
+      const colors = {
+        info: "text-slate-300",
+        success: "text-emerald-400",
+        warning: "text-amber-400",
+        error: "text-rose-400"
+      };
+
+      const time = new Date().toLocaleTimeString();
+      const div = document.createElement("div");
+      div.className = `${colors[type] || colors.info} flex space-x-2`;
+      div.innerHTML = `<span class="text-slate-600 select-none">[${time}]</span> <span>${msg}</span>`;
+      terminal.appendChild(div);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function updateProgress(current, total, title = "Syncing with Cloudflare R2...") {
+      const card = document.getElementById("activityCard");
+      card.classList.remove("hidden");
+      document.getElementById("activityTitle").innerText = title;
+
+      const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+      document.getElementById("progressBar").style.width = `${pct}%`;
+      document.getElementById("activityProgressStats").innerText = `${current} / ${total} (${pct}%)`;
+
+      if (current >= total && total > 0) {
+        document.getElementById("activitySpinner").innerHTML = `<i class="fa-solid fa-check text-emerald-400"></i>`;
+      } else {
+        document.getElementById("activitySpinner").innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-turf-400"></i>`;
+      }
+    }
+
+    // SEARCH RECORDINGS
+    async function searchRecordings(autoSyncAfter = false) {
+      const trackID = document.getElementById("trackIdInput").value;
+      const dateStr = document.getElementById("matchDateInput").value;
+      const startTimeStr = document.getElementById("startTimeInput").value;
+      const endTimeStr = document.getElementById("endTimeInput").value;
+
+      if (!dateStr) {
+        showToast("Please select a date", "warning");
+        return;
+      }
+
+      const isoStart = buildISOTimeString(dateStr, startTimeStr);
+      const isoEnd = buildISOTimeString(dateStr, endTimeStr);
+
+      const searchBtn = document.getElementById("searchBtn");
+      searchBtn.disabled = true;
+      searchBtn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> <span>Searching...</span>`;
+
+      logMessage(`Searching NVR for Track ${trackID} from ${isoStart} to ${isoEnd}...`);
+
+      try {
+        const response = await fetch(`/recordings?trackID=${trackID}&startTime=${encodeURIComponent(isoStart)}&endTime=${encodeURIComponent(isoEnd)}&maxResults=50`);
+        
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        parseAndRenderSearchResults(data, trackID);
+
+        if (autoSyncAfter && currentRecordings.length > 0) {
+          logMessage(`Auto-sync triggered! Syncing ${currentRecordings.length} recordings to Cloudflare R2...`, "info");
+          selectAllRecordings(true);
+          batchSyncSelected();
+        }
+      } catch (err) {
+        logMessage(`Search failed: ${err.message}`, "error");
+        showToast(`Search error: ${err.message}`, "error");
+        renderEmptyTable("Failed to fetch recordings from NVR. Check connection/IP.");
+      } finally {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = `<i class="fa-solid fa-search"></i> <span>Find Videos</span>`;
+      }
+    }
+
+    // Parse Hikvision ISAPI XML-to-JSON
+    function parseAndRenderSearchResults(data, trackID) {
+      currentRecordings = [];
+      selectedIndices.clear();
+      updateBatchToolbar();
+
+      let items = [];
+      try {
+        const searchResult = data.CMSearchResult || data;
+        if (searchResult && searchResult.matchList) {
+          const matchList = searchResult.matchList;
+          if (Array.isArray(matchList.searchMatchItem)) {
+            items = matchList.searchMatchItem;
+          } else if (matchList.searchMatchItem) {
+            items = [matchList.searchMatchItem];
+          }
+        }
+      } catch (e) {
+        console.error("XML parse mapping error", e);
+      }
+
+      // Map items
+      items.forEach((item, index) => {
+        const timeSpan = item.timeSpan || {};
+        const startTime = timeSpan.startTime || item.startTime;
+        const endTime = timeSpan.endTime || item.endTime;
+        const descriptor = item.mediaSegmentDescriptor || {};
+        const playbackURI = descriptor.playbackURI || item.playbackURI || (typeof descriptor === "string" ? descriptor : "");
+
+        currentRecordings.push({
+          id: index,
+          trackID: item.trackID || trackID,
+          startTime: startTime,
+          endTime: endTime,
+          playbackURI: playbackURI,
+          status: "ready", // ready, syncing, uploaded, failed
+          r2Key: null,
+          r2Url: null
+        });
+      });
+
+      logMessage(`Found ${currentRecordings.length} match recordings for Track ${trackID}`, currentRecordings.length > 0 ? "success" : "warning");
+      renderRecordingsTable();
+    }
+
+    function renderRecordingsTable() {
+      const tbody = document.getElementById("recordingsTableBody");
+      const countBadge = document.getElementById("resultsCountBadge");
+      countBadge.innerText = `${currentRecordings.length} found`;
+
+      if (currentRecordings.length === 0) {
+        renderEmptyTable("No recordings found in this time range on NVR.");
+        return;
+      }
+
+      tbody.innerHTML = "";
+
+      currentRecordings.forEach((rec, idx) => {
+        const isChecked = selectedIndices.has(idx);
+        const duration = calculateDuration(rec.startTime, rec.endTime);
+        const tr = document.createElement("tr");
+        tr.className = `hover:bg-dark-900/60 transition ${isChecked ? "bg-turf-900/10" : ""}`;
+        tr.id = `row-rec-${idx}`;
+
+        // Status Badge HTML
+        let statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-400">Ready</span>`;
+        if (rec.status === "syncing") {
+          statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"><i class="fa-solid fa-circle-notch animate-spin mr-1"></i> Syncing...</span>`;
+        } else if (rec.status === "uploaded") {
+          statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><i class="fa-solid fa-cloud-check mr-1"></i> In R2</span>`;
+        } else if (rec.status === "failed") {
+          statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Failed</span>`;
+        }
+
+        tr.innerHTML = `
+          <td class="p-4">
+            <input type="checkbox" onchange="toggleSelectRecord(${idx}, this.checked)" ${isChecked ? "checked" : ""} class="rounded border-slate-700 bg-dark-900 text-turf-500 focus:ring-turf-500" />
+          </td>
+          <td class="py-3 px-4">
+            <div class="font-medium text-slate-100">${formatDisplayTime(rec.startTime)} → ${formatDisplayTime(rec.endTime)}</div>
+            <div class="text-[11px] text-slate-500 font-mono">${rec.startTime || ""}</div>
+          </td>
+          <td class="py-3 px-4 font-mono font-semibold text-emerald-400">${duration}</td>
+          <td class="py-3 px-4">
+            <span class="px-2 py-0.5 rounded-md bg-dark-800 text-xs font-semibold text-slate-300 border border-slate-700/60">
+              Track ${rec.trackID}
+            </span>
+          </td>
+          <td class="py-3 px-4 max-w-xs truncate" title="${rec.playbackURI}">
+            <div class="font-mono text-xs text-slate-400 truncate">${rec.playbackURI || "URI not found"}</div>
+          </td>
+          <td class="py-3 px-4 text-center" id="status-cell-${idx}">${statusBadge}</td>
+          <td class="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
+            <button onclick="syncRecordingToR2(${idx})" title="Upload to Cloudflare R2" class="p-2 rounded-lg bg-dark-800 hover:bg-emerald-600 hover:text-white border border-slate-700 text-emerald-400 text-xs transition">
+              <i class="fa-solid fa-cloud-arrow-up"></i>
+            </button>
+            <button onclick="downloadRecordingToPC(${idx})" title="Download directly to PC" class="p-2 rounded-lg bg-dark-800 hover:bg-slate-700 hover:text-white border border-slate-700 text-slate-300 text-xs transition">
+              <i class="fa-solid fa-download"></i>
+            </button>
+            <button onclick="copyToClipboard('${rec.playbackURI}', 'Playback URI copied!')" title="Copy URI" class="p-2 rounded-lg bg-dark-800 hover:bg-slate-700 hover:text-white border border-slate-700 text-slate-400 text-xs transition">
+              <i class="fa-regular fa-copy"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderEmptyTable(message) {
+      const tbody = document.getElementById("recordingsTableBody");
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="py-12 text-center text-slate-500">
+            <i class="fa-solid fa-inbox text-2xl mb-2 text-slate-600"></i>
+            <p>${message}</p>
+          </td>
+        </tr>
+      `;
+      document.getElementById("resultsCountBadge").innerText = "0 found";
+    }
+
+    // SELECTION MANAGEMENT
+    function toggleSelectRecord(index, isChecked) {
+      if (isChecked) {
+        selectedIndices.add(index);
+      } else {
+        selectedIndices.delete(index);
+      }
+      updateBatchToolbar();
+    }
+
+    function toggleSelectAll(checkbox) {
+      selectAllRecordings(checkbox.checked);
+    }
+
+    function selectAllRecordings(isSelected) {
+      selectedIndices.clear();
+      if (isSelected) {
+        currentRecordings.forEach((_, idx) => selectedIndices.add(idx));
+      }
+      document.getElementById("selectAllCheckbox").checked = isSelected;
+      updateBatchToolbar();
+      renderRecordingsTable();
+    }
+
+    function updateBatchToolbar() {
+      const bar = document.getElementById("batchActionsBar");
+      const count = document.getElementById("selectedCountText");
+      count.innerText = selectedIndices.size;
+      if (selectedIndices.size > 0) {
+        bar.classList.remove("hidden");
+      } else {
+        bar.classList.add("hidden");
+      }
+    }
+
+    // SYNC TO CLOUDFLARE R2
+    async function syncRecordingToR2(index) {
+      const rec = currentRecordings[index];
+      if (!rec || !rec.playbackURI) {
+        showToast("Playback URI missing for this item", "error");
+        return;
+      }
+
+      rec.status = "syncing";
+      renderRecordingsTable();
+
+      // Clean formatted R2 key name: highlights/turfcast_track101_20260906_1530.mp4
+      const timestampClean = (rec.startTime || new Date().toISOString()).replace(/[-:]/g, "").replace(/\..+/, "").replace("Z", "");
+      const key = `recordings/turfcast_track${rec.trackID}_${timestampClean}.mp4`;
+
+      logMessage(`Streaming to Cloudflare R2 [Key: ${key}]...`);
+
+      try {
+        const res = await fetch("/recordings/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            playbackURI: rec.playbackURI,
+            key: key
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "R2 Sync failed");
+        }
+
+        rec.status = "uploaded";
+        rec.r2Key = data.key;
+        rec.r2Url = data.url;
+        logMessage(`Synced successfully to Cloudflare R2: ${data.key}`, "success");
+        showToast(`Video uploaded to Cloudflare R2!`, "success");
+
+        // Reload gallery to reflect new video
+        loadR2Videos();
+      } catch (err) {
+        rec.status = "failed";
+        logMessage(`Upload failed: ${err.message}`, "error");
+        showToast(`Sync error: ${err.message}`, "error");
+      } finally {
+        renderRecordingsTable();
+      }
+    }
+
+    // DOWNLOAD DIRECTLY TO PC FROM NVR
+    function downloadRecordingToPC(index) {
+      const rec = currentRecordings[index];
+      if (!rec || !rec.playbackURI) {
+        showToast("Playback URI missing for this item", "error");
+        return;
+      }
+
+      const timestampClean = (rec.startTime || new Date().toISOString()).replace(/[-:]/g, "").replace(/\..+/, "");
+      const filename = `turfcast_match_track${rec.trackID}_${timestampClean}.mp4`;
+      const downloadUrl = `/recordings/download?playbackURI=${encodeURIComponent(rec.playbackURI)}&filename=${encodeURIComponent(filename)}`;
+
+      logMessage(`Downloading ${filename} directly to PC...`, "info");
+      showToast("Starting download...", "info");
+
+      // Trigger browser download via invisible link
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    // BATCH OPERATIONS
+    async function batchSyncSelected() {
+      const indices = Array.from(selectedIndices);
+      if (indices.length === 0) {
+        showToast("No recordings selected", "warning");
+        return;
+      }
+
+      logMessage(`Starting batch sync of ${indices.length} recordings...`, "info");
+      updateProgress(0, indices.length, "Batch uploading to Cloudflare R2...");
+
+      for (let i = 0; i < indices.length; i++) {
+        const idx = indices[i];
+        updateProgress(i, indices.length, `Uploading video ${i + 1} of ${indices.length}...`);
+        await syncRecordingToR2(idx);
+        updateProgress(i + 1, indices.length, `Uploaded video ${i + 1} of ${indices.length}`);
+      }
+
+      showToast(`Batch sync completed! (${indices.length} videos processed)`, "success");
+      logMessage(`All ${indices.length} recordings processed.`, "success");
+    }
+
+    function batchDownloadSelected() {
+      const indices = Array.from(selectedIndices);
+      if (indices.length === 0) {
+        showToast("No recordings selected", "warning");
+        return;
+      }
+
+      showToast(`Starting downloads for ${indices.length} files...`, "info");
+      indices.forEach((idx, i) => {
+        setTimeout(() => downloadRecordingToPC(idx), i * 1500); // Stagger downloads slightly to prevent browser blocking
+      });
+    }
+
+    // CLOUDFLARE R2 LIBRARY & PLAYER
+    async function loadR2Videos() {
+      const grid = document.getElementById("r2VideoGrid");
+      const countBadge = document.getElementById("r2CountBadge");
+
+      try {
+        const res = await fetch("/r2/videos");
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Failed to load R2 objects");
+        }
+
+        r2Videos = data.items || [];
+        countBadge.innerText = r2Videos.length;
+
+        if (r2Videos.length === 0) {
+          grid.innerHTML = `
+            <div class="col-span-full py-16 text-center text-slate-500 glass-panel rounded-2xl">
+              <i class="fa-solid fa-cloud-moon text-4xl mb-3 text-slate-600"></i>
+              <p class="text-base font-semibold text-slate-300">Cloud Storage is Empty</p>
+              <p class="text-xs text-slate-500 mt-1">Videos synced from the NVR will show up here automatically.</p>
+            </div>
+          `;
+          return;
+        }
+
+        grid.innerHTML = "";
+
+        r2Videos.forEach((video) => {
+          const sizeFormatted = formatFileSize(video.size);
+          const dateFormatted = video.lastModified ? new Date(video.lastModified).toLocaleString() : "-";
+          const filename = video.key.split("/").pop() || video.key;
+
+          const card = document.createElement("div");
+          card.className = "glass-panel rounded-2xl p-4 flex flex-col justify-between space-y-4 hover:border-turf-500/40 transition group";
+
+          card.innerHTML = `
+            <div>
+              <div class="flex items-start justify-between gap-2">
+                <div class="w-10 h-10 rounded-xl bg-dark-900 border border-slate-700/60 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition">
+                  <i class="fa-solid fa-file-video text-lg"></i>
+                </div>
+                <button onclick="deleteR2Video('${video.key}')" title="Delete from Cloud" class="text-slate-500 hover:text-rose-400 p-1 transition">
+                  <i class="fa-regular fa-trash-can"></i>
+                </button>
+              </div>
+              <h4 class="font-semibold text-sm text-slate-100 truncate mt-3" title="${video.key}">${filename}</h4>
+              <div class="flex items-center space-x-3 text-xs text-slate-400 mt-1">
+                <span><i class="fa-solid fa-hard-drive mr-1 text-slate-500"></i>${sizeFormatted}</span>
+                <span>•</span>
+                <span><i class="fa-regular fa-clock mr-1 text-slate-500"></i>${dateFormatted}</span>
+              </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+              <button onclick="playR2Video('${video.url || ""}', '${filename}')" class="flex-1 bg-turf-600/20 hover:bg-turf-600 text-turf-400 hover:text-white border border-turf-500/30 text-xs font-semibold py-2 px-3 rounded-xl transition flex items-center justify-center space-x-1.5">
+                <i class="fa-solid fa-play"></i>
+                <span>Watch</span>
+              </button>
+              <button onclick="copyToClipboard('${video.url || ""}', 'Public Cloud link copied!')" title="Copy Public Link" class="bg-dark-800 hover:bg-slate-700 text-slate-300 border border-slate-700 p-2 rounded-xl text-xs transition">
+                <i class="fa-regular fa-copy"></i>
+              </button>
+              <a href="${video.url || "#"}" target="_blank" download="${filename}" title="Download from R2" class="bg-dark-800 hover:bg-slate-700 text-slate-300 border border-slate-700 p-2 rounded-xl text-xs transition">
+                <i class="fa-solid fa-download"></i>
+              </a>
+            </div>
+          `;
+          grid.appendChild(card);
+        });
+
+      } catch (err) {
+        console.error("R2 listing error:", err);
+        grid.innerHTML = `
+          <div class="col-span-full py-12 text-center text-rose-400 glass-panel rounded-2xl">
+            <i class="fa-solid fa-triangle-exclamation text-2xl mb-2"></i>
+            <p>Failed to load Cloudflare R2 videos: ${err.message}</p>
+          </div>
+        `;
+      }
+    }
+
+    async function deleteR2Video(key) {
+      if (!confirm(`Are you sure you want to delete "${key}" from Cloudflare R2?`)) return;
+
+      try {
+        const res = await fetch(`/r2/videos?key=${encodeURIComponent(key)}`, {
+          method: "DELETE"
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Deleted ${key}`, "success");
+          loadR2Videos();
+        } else {
+          showToast(`Failed to delete: ${data.error}`, "error");
+        }
+      } catch (err) {
+        showToast(`Delete error: ${err.message}`, "error");
+      }
+    }
+
+    // VIDEO MODAL PLAYER
+    function playR2Video(url, title) {
+      if (!url) {
+        showToast("Public URL not available for this video", "warning");
+        return;
+      }
+
+      const modal = document.getElementById("videoModal");
+      const videoElem = document.getElementById("modalVideoElement");
+      const titleElem = document.getElementById("videoModalTitle");
+      const urlElem = document.getElementById("modalVideoUrl");
+      const downloadBtn = document.getElementById("modalDownloadBtn");
+
+      titleElem.innerText = title || "TurfCast Video Player";
+      urlElem.innerText = url;
+      downloadBtn.href = url;
+      videoElem.src = url;
+
+      modal.classList.remove("hidden");
+      videoElem.play().catch(() => {});
+    }
+
+    function closeVideoModal() {
+      const modal = document.getElementById("videoModal");
+      const videoElem = document.getElementById("modalVideoElement");
+      videoElem.pause();
+      videoElem.src = "";
+      modal.classList.add("hidden");
+    }
+
+    function copyModalUrl() {
+      const url = document.getElementById("modalVideoUrl").innerText;
+      copyToClipboard(url, "Video link copied!");
+    }
+
+    // AUTO-MONITOR MODE (FOR LIVE SPORTS MATCHES)
+    function toggleAutoMonitor(enabled) {
+      isAutoMonitoring = enabled;
+      const statusText = document.getElementById("autoMonitorStatusText");
+      const toggleBg = document.getElementById("toggleBg");
+      const toggleDot = document.getElementById("toggleDot");
+
+      if (enabled) {
+        statusText.innerText = "(Active: Scanning every 3m)";
+        statusText.classList.remove("text-slate-500");
+        statusText.classList.add("text-emerald-400");
+        toggleBg.classList.replace("bg-slate-700", "bg-emerald-500");
+        toggleDot.classList.replace("left-0.5", "left-4");
+
+        logMessage("Auto-Monitor Mode activated. Polling every 3 minutes for new match recordings...", "info");
+        showToast("Live Auto-Sync activated!", "success");
+
+        // Run immediately then every 3 minutes
+        applyTimePreset(15);
+        searchRecordings(true);
+
+        autoMonitorInterval = setInterval(() => {
+          logMessage("Auto-Monitor: scanning recent 15 minutes...", "info");
+          applyTimePreset(15);
+          searchRecordings(true);
+        }, 3 * 60 * 1000);
+      } else {
+        statusText.innerText = "(Off)";
+        statusText.classList.remove("text-emerald-400");
+        statusText.classList.add("text-slate-500");
+        toggleBg.classList.replace("bg-emerald-500", "bg-slate-700");
+        toggleDot.classList.replace("left-4", "left-0.5");
+
+        if (autoMonitorInterval) clearInterval(autoMonitorInterval);
+        logMessage("Auto-Monitor Mode deactivated.", "warning");
+        showToast("Auto-Sync turned off", "info");
+      }
+    }
+
+    // UTILS
+    function formatFileSize(bytes) {
+      if (!bytes || bytes === 0) return "0 B";
+      const k = 1024;
+      const sizes = ["B", "KB", "MB", "GB", "TB"];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+    }
+
+    function copyToClipboard(text, toastMsg) {
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(toastMsg || "Copied to clipboard!", "success");
+      }).catch(() => {
+        showToast("Copy failed", "error");
+      });
+    }
+
+    function showToast(message, type = "info") {
+      const container = document.getElementById("toastContainer");
+      const toast = document.createElement("div");
+
+      const typeStyles = {
+        success: "bg-emerald-600 text-white border-emerald-500",
+        error: "bg-rose-600 text-white border-rose-500",
+        warning: "bg-amber-600 text-white border-amber-500",
+        info: "bg-dark-800 text-slate-100 border-slate-700"
+      };
+
+      const icons = {
+        success: "fa-solid fa-circle-check",
+        error: "fa-solid fa-circle-xmark",
+        warning: "fa-solid fa-triangle-exclamation",
+        info: "fa-solid fa-circle-info"
+      };
+
+      toast.className = `pointer-events-auto px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold flex items-center space-x-2 transition-all transform duration-300 opacity-0 translate-y-2 ${typeStyles[type] || typeStyles.info}`;
+      toast.innerHTML = `<i class="${icons[type] || icons.info}"></i> <span>${message}</span>`;
+
+      container.appendChild(toast);
+
+      // Animate In
+      setTimeout(() => {
+        toast.classList.remove("opacity-0", "translate-y-2");
+      }, 10);
+
+      // Animate Out & Remove
+      setTimeout(() => {
+        toast.classList.add("opacity-0", "translate-y-2");
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+  </script>
 </body>
-
 </html>
